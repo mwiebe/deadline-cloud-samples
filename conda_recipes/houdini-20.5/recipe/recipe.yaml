@@ -1,0 +1,47 @@
+# Recipe in rattler-build format.
+# See https://prefix-dev.github.io/rattler-build/latest/
+
+context:
+  version: "20.5.332"
+  major_version: "20.5"
+  minor_version: "332"
+
+package:
+  name: houdini
+  version: ${{ version }}
+
+source:
+  - if: linux
+    then:
+      url: file://archive_files/houdini-{{ version }}-linux_x86_64_gcc11.2.tar.gz
+      sha256: 72ac8d1d4aed4fe19b37b995e62ed8507186e5f382fb7bac35fe11f65748bd93
+      target_directory: installer
+
+build:
+  number: 0
+  # These build options for repackaging an application
+  # https://prefix-dev.github.io/rattler-build/latest/build_options/#prefix-detection-replacement-options
+  prefix_detection:
+    ignore_binary_files: True
+  # https://prefix-dev.github.io/rattler-build/latest/build_options/#dynamic-linking-configuration
+  dynamic_linking:
+    binary_relocation: False
+    missing_dso_allowlist:
+    - "**"
+
+requirements:
+  build:
+    - if: linux
+      then:
+      - patchelf
+
+tests:
+  - script:
+    - houdini -h
+
+about:
+  homepage: https://www.sidefx.com/products/houdini/
+  license: LicenseRef-SideFXEULA
+  summary: >
+    Houdini is built from the ground up to be a procedural system that empowers artists to work freely,
+    create multiple iterations and rapidly share workflows with colleagues.

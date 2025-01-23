@@ -33,6 +33,8 @@ HOUDINI_VERSION=${PKG_VERSION%.*}
 
 # Remove the documentation, it's not needed on the farm
 rm -r $HOUDINI_DIR/houdini/help
+# Remove the toolkit samples, they're not needed on the farm
+rm -r $HOUDINI_DIR/toolkit/samples
 
 # Create symlinks
 mkdir -p $PREFIX/bin
@@ -46,9 +48,6 @@ done
 mkdir -p $SRC_DIR/download
 cd $SRC_DIR/download
 dnf download --resolve -y alsa-lib fontconfig libXScrnSaver libX* libGL libXcomposite libxkbcommon
-
-# Install python deadline package
-pip install deadline-cloud-for-houdini
 
 
 for rpm_file in $(realpath $SRC_DIR/download/*.rpm); do

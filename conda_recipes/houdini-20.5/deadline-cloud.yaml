@@ -2,4 +2,8 @@ condaPlatforms:
   - platform: linux-64
     defaultSubmit: true
     sourceArchiveFilename: houdini-20.5.332-linux_x86_64_gcc11.2.tar.gz
-
+    sourceDownloadInstructions: Download the installer archive from SideFX Houdini's downloads page.
+    buildTool: rattler-build
+jobParameters:
+  - name: CondaChannels
+    value: conda-forge
