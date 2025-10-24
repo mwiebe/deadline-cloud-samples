@@ -19,7 +19,7 @@ source:
   - if: win
     then:
       - url: file://archive_files/Autodesk_Maya_${{ major_version }}_${{ minor_version }}_Windows_installation.zip
-        sha256: 2a8943ef911ac88faf2342e4feda6ac1a1c38aecbd164ea6441263283696c505
+        sha256: 57490abc4e1d7c7a8a057a29d718e79172a3ecd17cc04c5863600b11fc437d57
         target_directory: installer
       # See https://www.autodesk.com/support/technical/article/caas/tsarticles/ts/75wD5ycdkRVPHQtG4eUwBL.html
       # titled "Deploying Maya Batch on the Cloud" about making Maya for Windows cloud compliant.
@@ -28,6 +28,13 @@ source:
 
 build:
   number: 0
+  script:
+    - if: unix
+      then:
+        - bash $RECIPE_DIR/build.sh
+    - if: win
+      then:
+        - bash %RECIPE_DIR%\build_win.sh
   # These build options for repackaging an application
   # https://prefix-dev.github.io/rattler-build/latest/build_options/#prefix-detection-replacement-options
   prefix_detection:
