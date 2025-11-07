@@ -36,21 +36,21 @@ Resources:
           import os
           import sys
           import subprocess
-          
-          # Install the latest version of boto3 that has the job maxWorkerCount in it
+
+          # Install the latest version of boto3 that returns maxWorkerCount and taskFailureRetryCount for jobs
           os.makedirs("/tmp/site-packages", exist_ok=True)
           sys.path.insert(0, "/tmp/site-packages")
           subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "--target", "/tmp/site-packages", "boto3"])
-          
+
           import json
           import boto3
           from datetime import datetime, timezone
           from math import ceil
-          
-          
+
+
           def lambda_handler(event, context):
               deadline = boto3.client("deadline")
-          
+
               # Input event matches the structure of a Job Lifecycle Status Change event
               # {"detail": {"farmId": "${FarmId}", "queueId": "${QueueId}"}}
               response = []
@@ -60,24 +60,24 @@ Resources:
               previous_lifecycle_status = event.get("detail", {}).get("previousLifecycleStatus" , None)
               if not farm_id and queue_id:
                   return {"statusCode": 422, "body": "Missing .detail.farmId or .detail.queueId"}
-          
+
               if previous_lifecycle_status is not None:
                   return {"statusCode": 200, "body": "Balancer skipping lifecycle events that are not job submission"}
-          
+
               active_fleet_ids = get_all_associated_fleet_ids(deadline, farm_id, queue_id)
               total_max_worker_count = sum(
                   [get_max_worker_count(deadline, farm_id, x) for x in active_fleet_ids]
               )
-          
+
               active_jobs = get_all_active_jobs(deadline, farm_id, queue_id)
               active_job_count = len(active_jobs)
-          
+
               priority_100_jobs = [job for job in active_jobs if job["priority"] == 100]
               priority_100_job_count = len(priority_100_jobs)
-          
+
               priority_0_jobs = [job for job in active_jobs if job["priority"] == 0]
               priority_0_job_count = len(priority_0_jobs)
-          
+
               if priority_100_job_count > 0:
                   # Priority 100 jobs get all the capacity if they exist
                   # so allocate all the weights to them
@@ -86,10 +86,10 @@ Resources:
                   # Priority 0 jobs get no capacity until all other jobs are done
                   # so allocate all the weights to higher priority jobs
                   active_jobs = [job for job in active_jobs if job["priority"] != 0]
-          
+
               for job in active_jobs:
                   job["weight"] = calculate_job_weight(deadline, farm_id, queue_id, job)
-          
+
               job_weight_sum = max(1, sum(job["weight"] for job in active_jobs))
               for job in active_jobs:
                   # ceil because we'd rather have too high of a limit rather than idle workers
@@ -119,8 +119,8 @@ Resources:
               })
               print(json.dumps(response))
               return {"statusCode": 200, "body": json.dumps(response)}
-          
-          
+
+
           def get_all_active_jobs(deadline, farm_id, queue_id):
               active_jobs = []
               filter_expressions = {
@@ -163,7 +163,7 @@ Resources:
                   ],
                   "operator": "OR",
               }
-          
+
               job_search_response = deadline.search_jobs(
                   filterExpressions=filter_expressions,
                   farmId=farm_id,
@@ -172,7 +172,7 @@ Resources:
                   pageSize=100,
               )
               active_jobs.extend(job_search_response["jobs"])
-          
+
               while job_search_response.get("nextItemOffset"):
                   job_search_response = deadline.search_jobs(
                       filterExpressions=filter_expressions,
@@ -183,8 +183,8 @@ Resources:
                   )
                   active_jobs.extend(job_search_response["jobs"])
               return active_jobs
-          
-          
+
+
           def get_all_associated_fleet_ids(deadline, farm_id, queue_id):
               associated_fleet_ids = []
               qfa_paginator = deadline.get_paginator("list_queue_fleet_associations")
@@ -197,48 +197,38 @@ Resources:
                       ]
                   )
               return associated_fleet_ids
-          
-          
+
+
           def get_max_worker_count(deadline, farm_id, fleet_id):
               fleet_info = deadline.get_fleet(farmId=farm_id, fleetId=fleet_id)
               return fleet_info["maxWorkerCount"]
-          
-          
+
+
           def calculate_job_weight(deadline, farm_id, queue_id, job):
               job_task_run_status_counts = job["taskRunStatusCounts"]
               total_rendering_tasks = sum(job_task_run_status_counts[run_status]
                                           for run_status in ["RUNNING", "ASSIGNED", "STARTING", "SCHEDULED", "READY"])
-          
-              # While task run statuses are available counted at the job level, task failure retry counts are not.
-              # Therefore, we loop through all the individual tasks to get that.
-              tasks = []
-              steps_pages = deadline.get_paginator("list_steps").paginate(farmId=farm_id, queueId=queue_id, jobId=job["jobId"])
-              steps = steps_pages.build_full_result()["steps"]
-              # get every task across all steps
-              for step in steps:
-                  tasks_pages = deadline.get_paginator("list_tasks").paginate(farmId=farm_id, queueId=queue_id,
-                                                                              jobId=job["jobId"], stepId=step["stepId"])
-                  tasks.extend(tasks_pages.build_full_result()["tasks"])
-          
-              error_count = sum([task["failureRetryCount"] for task in tasks])
-          
+
+              # The search_jobs API returns the sum of failureRetryCount from all tasks
+              error_count = job.get("taskFailureRetryCount", 0)
+
               PW = float(os.environ["PRIORITY_WEIGHT"])
               EW = float(os.environ["ERROR_WEIGHT"])
               SW = float(os.environ["SUBMISSION_TIME_WEIGHT"])
               RW = float(os.environ["RENDERING_TASK_WEIGHT"])
               RB = float(os.environ["RENDERING_TASK_BUFFER"])
-          
+
               now = datetime.now(timezone.utc)  # Get current time in UTC
               time_difference = (now - job["createdAt"]).total_seconds()
-          
+
               priority_factor = job["priority"] * PW
               error_factor = error_count * EW
               time_factor = time_difference * SW
               rendering_factor = (total_rendering_tasks - RB) * RW
               weight = max(1, (priority_factor * priority_factor) + error_factor + time_factor + rendering_factor)
               return weight
-          
-          
+
+
           def update_job_max_worker_count(deadline, farm_id, queue_id, job_id, worker_limit):
               try:
                   update_job_result = deadline.update_job(
@@ -278,7 +268,8 @@ Resources:
         detail-type:
           - "Job Lifecycle Status Change"
       Targets:
-        - Arn: !GetAtt
+        - Id: DeadlineWeightedJobBalancerTarget
+          Arn: !GetAtt
             - DeadlineWeightedJobBalancer
             - Arn
           DeadLetterConfig:
@@ -460,8 +451,6 @@ Resources:
                   - deadline:GetFleet
                   - deadline:UpdateJob
                   - deadline:SearchJobs
-                  - deadline:ListSteps
-                  - deadline:ListTasks
                   - deadline:ListQueueFleetAssociations
                 Resource:
                   - !Sub "arn:aws:deadline:${AWS::Region}:${AWS::AccountId}:farm/${FarmId}"
