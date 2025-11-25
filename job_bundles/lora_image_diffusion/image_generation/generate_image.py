@@ -1,30 +1,33 @@
 import argparse
 import os
+
 import torch
 from diffusers import StableDiffusionPipeline
 from safetensors import safe_open
 from safetensors.torch import load_file
 from peft import LoraConfig, PeftModel, set_peft_model_state_dict
 
-# Set cache directory
-cache_dir = os.path.expanduser("~/.models/huggingface")
-os.makedirs(cache_dir, exist_ok=True)
-os.environ["HF_HOME"] = cache_dir
-os.environ["TRANSFORMERS_CACHE"] = cache_dir
-os.environ["HF_DATASETS_CACHE"] = cache_dir
+# Set cache directory for model downloads
+CACHE_DIR = os.path.expanduser("~/.models/huggingface")
+os.makedirs(CACHE_DIR, exist_ok=True)
+os.environ["HF_HOME"] = CACHE_DIR
+os.environ["TRANSFORMERS_CACHE"] = CACHE_DIR
+os.environ["HF_DATASETS_CACHE"] = CACHE_DIR
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--lora-path", required=True)
-parser.add_argument("--prompt", required=True)
-parser.add_argument("--negative-prompt", required=True)
-parser.add_argument("--width", type=int, required=True)
-parser.add_argument("--height", type=int, required=True)
-parser.add_argument("--num-inference-steps", type=int, required=True)
-parser.add_argument("--guidance-scale", type=float, required=True)
-parser.add_argument("--seed", type=int, required=True)
-parser.add_argument("--image-index", type=int, required=True)
-parser.add_argument("--output-dir", required=True)
-args = parser.parse_args()
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lora-path", required=True)
+    parser.add_argument("--prompt", required=True)
+    parser.add_argument("--negative-prompt", required=True)
+    parser.add_argument("--width", type=int, required=True)
+    parser.add_argument("--height", type=int, required=True)
+    parser.add_argument("--num-inference-steps", type=int, required=True)
+    parser.add_argument("--guidance-scale", type=float, required=True)
+    parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--image-index", type=int, required=True)
+    parser.add_argument("--output-dir", required=True)
+    return parser.parse_args()
 
 
 def load_lora_with_metadata(filepath):
@@ -50,60 +53,63 @@ def load_lora_with_metadata(filepath):
     return state_dict, metadata
 
 
-# Load LoRA weights and metadata
-lora_state_dict, lora_metadata = load_lora_with_metadata(args.lora_path)
-base_model = lora_metadata["base_model"]
-lora_rank = int(lora_metadata["lora_rank"])
-lora_alpha = int(lora_metadata.get("lora_alpha", lora_rank))
+def main():
+    args = parse_args()
 
-print(f"Loaded LoRA metadata: base_model={base_model}, rank={lora_rank}, alpha={lora_alpha}")
-print(f"Loaded {len(lora_state_dict)} LoRA tensors from file")
+    # Load LoRA weights and metadata
+    lora_state_dict, metadata = load_lora_with_metadata(args.lora_path)
+    base_model = metadata["base_model"]
+    lora_rank = int(metadata["lora_rank"])
+    lora_alpha = int(metadata.get("lora_alpha", lora_rank))
 
-device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
-print(f"Using device: {device}")
+    print(f"LoRA metadata: base_model={base_model}, rank={lora_rank}, alpha={lora_alpha}")
+    print(f"Loaded {len(lora_state_dict)} LoRA tensors")
 
-pipe = StableDiffusionPipeline.from_pretrained(
-    base_model,
-    torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-    safety_checker=None,
-    requires_safety_checker=False,
-).to(device)
+    device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+    print(f"Using device: {device}")
 
-lora_config = LoraConfig(
-    r=lora_rank, lora_alpha=lora_alpha, target_modules=["to_k", "to_q", "to_v", "to_out.0"]
-)
-pipe.unet = PeftModel(pipe.unet, lora_config)
+    # Load base model
+    pipe = StableDiffusionPipeline.from_pretrained(
+        base_model,
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        safety_checker=None,
+        requires_safety_checker=False,
+    ).to(device)
 
-set_peft_model_state_dict(pipe.unet, lora_state_dict)
+    # Apply LoRA
+    lora_config = LoraConfig(
+        r=lora_rank,
+        lora_alpha=lora_alpha,
+        target_modules=["to_k", "to_q", "to_v", "to_out.0"],
+    )
+    pipe.unet = PeftModel(pipe.unet, lora_config)
+    set_peft_model_state_dict(pipe.unet, lora_state_dict)
 
-lora_params_loaded = len(
-    [k for k in pipe.unet.state_dict().keys() if "lora" in k.lower()]
-)
-if lora_params_loaded == 0:
-    raise RuntimeError("FAILED: 0 LoRA parameters loaded into model!")
+    lora_params = sum(1 for k in pipe.unet.state_dict() if "lora" in k.lower())
+    if lora_params == 0:
+        raise RuntimeError("No LoRA parameters loaded into model")
+    print(f"Loaded {lora_params} LoRA parameters, scale={lora_alpha / lora_rank}")
 
-print(f"Successfully loaded {lora_params_loaded} LoRA parameters into UNet")
-print(f"LoRA scale: {lora_alpha / lora_rank}")
+    # Generate image
+    seed = (args.seed + args.image_index) if args.seed >= 0 else random.randrange(0, 0xffff_ffff_ffff_ffff)
+    generator = torch.Generator(device=device).manual_seed(seed)
 
-if args.seed == -1:
-    seed = args.image_index * 12345
-else:
-    seed = args.seed
+    image = pipe(
+        prompt=args.prompt,
+        negative_prompt=args.negative_prompt,
+        width=args.width,
+        height=args.height,
+        num_inference_steps=args.num_inference_steps,
+        guidance_scale=args.guidance_scale,
+        generator=generator,
+    ).images[0]
 
-generator = torch.Generator(device=device).manual_seed(seed)
+    # Save output
+    os.makedirs(args.output_dir, exist_ok=True)
+    output_path = os.path.join(args.output_dir, f"image_{args.image_index:04d}.png")
+    image.save(output_path)
+    print(f"Saved: {output_path}")
 
-image = pipe(
-    prompt=args.prompt,
-    negative_prompt=args.negative_prompt,
-    width=args.width,
-    height=args.height,
-    num_inference_steps=args.num_inference_steps,
-    guidance_scale=args.guidance_scale,
-    generator=generator,
-).images[0]
 
-filename = f"image_{args.image_index:04d}.png"
-output_path = os.path.join(args.output_dir, filename)
-os.makedirs(os.path.dirname(output_path), exist_ok=True)
-image.save(output_path)
-print(f"Generated image saved to {output_path}")
+if __name__ == "__main__":
+    main()

@@ -83,22 +83,22 @@ parameterDefinitions:
   maxValue: 150
 
 - name: GuidanceScale
-  type: STRING
+  type: FLOAT
   userInterface:
-    control: LINE_EDIT
+    control: SPIN_BOX
     label: Guidance Scale
     groupLabel: Generation Settings
   description: Classifier-free guidance scale
-  default: "7.5"
+  default: 7.5
 
 - name: Seed
-  type: STRING
+  type: INT
   userInterface:
-    control: LINE_EDIT
+    control: SPIN_BOX
     label: Seed
     groupLabel: Generation Settings
   description: Random seed for reproducibility (-1 for random)
-  default: "-1"
+  default: -1
 
 - name: GenerateScript
   description: Generation script
