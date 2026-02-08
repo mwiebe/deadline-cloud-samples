@@ -1,11 +1,12 @@
-specificationVersion: 'jobtemplate-2023-09'
+specificationVersion: jobtemplate-2023-09
+extensions: [FEATURE_BUNDLE_1, EXPR]
 name: Blender Render
 
 parameterDefinitions:
 
 # Render Parameters
 - name: BlenderSceneFile
-  type: PATH
+  type: path
   objectType: FILE
   dataFlow: IN
   userInterface:
@@ -21,58 +22,58 @@ parameterDefinitions:
     Choose the Blender scene file you want to render. Use the 'Job Attachments' tab
     to add textures and other files that the job needs.
 - name: Frames
-  type: STRING
+  type: range_expr
+  default: "1-10"
   userInterface:
     control: LINE_EDIT
     label: Frames
     groupLabel: Render Parameters
-  default: 1-10
 - name: OutputDir
-  type: PATH
+  type: path
   objectType: DIRECTORY
   dataFlow: OUT
+  default: ./output
   userInterface:
     control: CHOOSE_DIRECTORY
     label: Output Directory
     groupLabel: Render Parameters
-  default: "./output"
   description: Choose the render output directory.
 - name: OutputPattern
-  type: STRING
+  type: string
+  default: "output_####"
   userInterface:
     control: LINE_EDIT
     label: Output File Pattern
     groupLabel: Render Parameters
-  default: "output_####"
   description: Enter the output filename pattern (without extension).
 - name: Format
-  type: STRING
+  type: string
+  default: JPEG
+  allowedValues: [TGA, RAWTGA, JPEG, IRIS, IRIZ, PNG, HDR, TIFF, OPEN_EXR, OPEN_EXR_MULTILAYER, CINEON, DPX, DDS, JP2, WEBP]
   userInterface:
     control: DROPDOWN_LIST
     label: Output File Format
     groupLabel: Render Parameters
   description: Choose the file format to render as.
-  default: JPEG
-  allowedValues: [TGA, RAWTGA, JPEG, IRIS, IRIZ, PNG, HDR, TIFF, OPEN_EXR, OPEN_EXR_MULTILAYER, CINEON, DPX, DDS, JP2, WEBP]
 
 # Software Environment
 - name: CondaPackages
-  type: STRING
+  type: string
+  default: blender
   userInterface:
     # This parameter is for a queue environment, not used directly in the job,
     # so leave the GUI for the queue environment to display.
     control: HIDDEN
-  default: blender
   description: >
     If you have a Queue Environment that creates a Conda environment from a parameter called CondaPackages, this
     will set the default packages to use for the job.
 - name: RezPackages
-  type: STRING
+  type: string
+  default: blender
   userInterface:
     # This parameter is for a queue environment, not used directly in the job,
     # so leave the GUI for the queue environment to display.
     control: HIDDEN
-  default: blender
   description: >
     If you have a Queue Environment that creates a Rez environment from a parameter called RezPackages, this will
     tell it to install blender.
@@ -83,23 +84,16 @@ steps:
     taskParameterDefinitions:
     - name: Frame
       type: INT
-      range: "{{Param.Frames}}"
-  script:
-    actions:
-      onRun:
-        command: bash
-        args: ['{{Task.File.Run}}']
-    embeddedFiles:
-      - name: Run
-        type: TEXT
-        data: |
-          # Configure the task to fail if any individual command fails.
-          set -xeuo pipefail
+      range: "{{ Param.Frames }}"
+  bash:
+    script: |
+      # Configure the task to fail if any individual command fails.
+      set -xeuo pipefail
 
-          mkdir -p '{{Param.OutputDir}}'
+      mkdir -p {{ repr_sh(Param.OutputDir) }}
 
-          blender --background '{{Param.BlenderSceneFile}}' \
-                  --render-output '{{Param.OutputDir}}/{{Param.OutputPattern}}' \
-                  --render-format {{Param.Format}} \
-                  --use-extension 1 \
-                  --render-frame {{Task.Param.Frame}}
+      blender --background {{ repr_sh(Param.BlenderSceneFile) }} \
+              --render-output {{ repr_sh(Param.OutputDir / Param.OutputPattern) }} \
+              --render-format {{ Param.Format }} \
+              --use-extension 1 \
+              --render-frame {{ Task.Param.Frame }}

@@ -1,4 +1,5 @@
-specificationVersion: 'jobtemplate-2023-09'
+specificationVersion: jobtemplate-2023-09
+extensions: [FEATURE_BUNDLE_1, EXPR]
 
 name: Self-Contained Template - 1 - Job Development Progression
 description: |
@@ -6,7 +7,7 @@ description: |
   workload you want to run and building it into a job bundle.
 
   In this style, all your script code is embedded into the job template yaml.
-  This means you can use the {{Param.InputCsvFile}} style of parameter value substitution
+  This means you can use the {{ Param.InputCsvFile }} style of parameter value substitution
   anywhere in your scripts.
 
   As you develop your job to have more features and to run better in parallel, you
@@ -45,7 +46,7 @@ steps:
     actions:
       onRun:
         command: bash
-        args: ['{{Task.File.Run}}']
+        args: ['{{ Task.File.Run }}']
     embeddedFiles:
     - name: Run
       type: TEXT
@@ -54,12 +55,12 @@ steps:
         set -euo pipefail
 
         # Initialize the workspace
-        mkdir -p '{{Param.WorkspacePath}}'
-        cd '{{Param.WorkspacePath}}'
+        mkdir -p {{ repr_sh(Param.WorkspacePath) }}
+        cd {{ repr_sh(Param.WorkspacePath) }}
 
         # Copy the input CSV files
         mkdir -p csv
-        cp '{{Param.InputCsvFile}}' csv/dataset.csv
+        cp {{ repr_sh(Param.InputCsvFile) }} csv/dataset.csv
 
 - name: ProcessWithPython
   dependencies:
@@ -68,7 +69,7 @@ steps:
     actions:
       onRun:
         command: python
-        args: ['{{Task.File.Run}}']
+        args: ['{{ Task.File.Run }}']
     embeddedFiles:
     - name: Run
       type: TEXT
@@ -76,14 +77,13 @@ steps:
         import os
         import polars as pl
 
-        os.chdir(r"{{Param.WorkspacePath}}")
+        os.chdir({{ repr_py(Param.WorkspacePath) }})
         os.makedirs("output", exist_ok=True)
 
         q = (
             pl.scan_csv("csv/dataset.csv")
             .group_by("Action Type")
-            .agg(pl.all().sum())
-            .select("Action Type", "Duration (Seconds)")
+            .agg(pl.col("Duration (Seconds)").sum())
         )
 
         df = q.collect()
