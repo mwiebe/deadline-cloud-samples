@@ -478,6 +478,23 @@ steps:
             if [ "$CANCELED" -eq 1 ]; then
                 kill -TERM "$MDRUN_PID" 2>/dev/null || true
             fi
+
+            # Report progress from md.log, where mdrun writes a "Step Time"
+            # header followed by the current step every nstlog steps. The loop
+            # ends by itself after mdrun exits, so it never outlives the task.
+            (
+                LAST=""
+                while kill -0 "$MDRUN_PID" 2>/dev/null; do
+                    sleep 10
+                    STEP=$(awk '$1 == "Step" && $2 == "Time" { getline; s = $1 } END { if (s != "") print s }' md.log 2>/dev/null || true)
+                    if [ -n "$STEP" ] && [ "$STEP" != "$LAST" ]; then
+                        LAST=$STEP
+                        awk -v s="$STEP" -v n="{{Param.ProductionSteps}}" 'BEGIN { printf "openjd_progress: %.1f\n", 100 * s / n }'
+                    fi
+                done
+            ) &
+            PROGRESS_PID=$!
+
             set +e
             wait "$MDRUN_PID"
             MDRUN_STATUS=$?
@@ -486,9 +503,18 @@ steps:
                 wait "$MDRUN_PID"
                 MDRUN_STATUS=$?
             done
+            # A trapped signal can also interrupt this wait, so repeat it.
+            while kill -0 "$PROGRESS_PID" 2>/dev/null; do
+                wait "$PROGRESS_PID"
+            done
             set -e
 
-            # Copy results, including the checkpoint when the run was canceled
+            # Copy results, including the checkpoint when the run was canceled.
+            # Job attachments only upload the outputs of tasks that succeed, so
+            # a canceled task's checkpoint is only kept with shared storage. See
+            # https://github.com/OpenJobDescription/openjd-specifications/discussions/169
+            # for a potential way for a template to tell the scheduler it can
+            # checkpoint, so a checkpointed task could be resumed.
             cp md.tpr md.xtc md.edr md.log md.gro md.cpt "${OUTDIR}/" 2>/dev/null || true
 
             # mdrun exits 0 after stopping on a signal, so check for a cancel too.
