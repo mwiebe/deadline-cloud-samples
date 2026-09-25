@@ -79,6 +79,17 @@ parameterDefinitions:
     label: Render Samples
     groupLabel: Render Parameters
   description: Override the number of render samples (Cycles/EEVEE). Set to 0 to use the scene default.
+- name: TaskTimeoutSeconds
+  type: int
+  default: 0
+  minValue: 0
+  userInterface:
+    control: SPIN_BOX
+    label: Frame Timeout (Seconds)
+    groupLabel: Render Parameters
+  description: >
+    Fail a frame that renders for longer than this many seconds, so a stuck frame
+    does not hold a worker indefinitely. Set to 0 for no timeout.
 
 # Software Environment
 - name: CondaPackages
@@ -110,6 +121,8 @@ steps:
       type: INT
       range: "{{ Param.Frames }}"
   bash:
+    # A null timeout leaves the action without one.
+    timeout: "{{ Param.TaskTimeoutSeconds if Param.TaskTimeoutSeconds > 0 else null }}"
     script: |
       # Configure the task to fail if any individual command fails.
       set -xeuo pipefail
