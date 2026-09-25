@@ -97,7 +97,7 @@ parameterSpace:
 
 The default list is a small, ungated, fast-loading mix that fits comfortably on a single A10G/L4: two models from the same family at different sizes (Qwen2.5 0.5B vs 1.5B) so you can see scaling within a family, plus one from a different family (Pythia 1.4B) at a comparable size so you can see cross-family differences. It's a starting point. Swap in whatever models you want to compare.
 
-To add or remove models, edit the `range` list. Each entry becomes a task visible in the Monitor UI. Model IDs must be supported by vLLM (see the [vLLM supported models list](https://docs.vllm.ai/en/latest/models/supported_models.html)). When you add larger models, raise the `WorkerMemoryGiB` parameter so tasks only run on workers with enough RAM to load them.
+To add or remove models, edit the `range` list. Each entry becomes a task visible in the Monitor UI. Model IDs must be supported by vLLM (see the [vLLM supported models list](https://docs.vllm.ai/en/latest/models/supported_models.html)). When you add larger models, raise the `WorkerMemoryGiB` parameter so tasks only run on workers with enough RAM to load them. If no fleet in the queue has workers with that much RAM, the EvalModels tasks show as `NOT_COMPATIBLE` instead of running.
 
 ## Choosing benchmarks
 
