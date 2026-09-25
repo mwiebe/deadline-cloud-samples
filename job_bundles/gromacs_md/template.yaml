@@ -164,7 +164,7 @@ parameterDefinitions:
     userInterface:
       control: SPIN_BOX
       label: "Shutdown Grace Period (s)"
-      groupLabel: "Parallelism"
+      groupLabel: "Simulation Parameters"
 
   - name: CondaPackages
     type: STRING
@@ -469,10 +469,15 @@ steps:
             # it. On SIGTERM, mdrun stops at its next neighbor search step and
             # writes a checkpoint, which the copy below keeps. The task's
             # notifyPeriodInSeconds sets how long mdrun has to do this.
+            MDRUN_PID=""
+            CANCELED=0
+            trap 'echo "Cancel requested: waiting for mdrun to write a checkpoint"; CANCELED=1; [ -n "$MDRUN_PID" ] && kill -TERM "$MDRUN_PID" 2>/dev/null || true' TERM
             gmx mdrun -deffnm md -ntmpi 1 -ntomp $(nproc) &
             MDRUN_PID=$!
-            CANCELED=0
-            trap 'echo "Cancel requested: waiting for mdrun to write a checkpoint"; CANCELED=1; kill -TERM "$MDRUN_PID" 2>/dev/null || true' TERM
+            # A cancel that arrives before mdrun starts has nothing to checkpoint.
+            if [ "$CANCELED" -eq 1 ]; then
+                kill -TERM "$MDRUN_PID" 2>/dev/null || true
+            fi
             set +e
             wait "$MDRUN_PID"
             MDRUN_STATUS=$?

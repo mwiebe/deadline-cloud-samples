@@ -98,7 +98,7 @@ deadline bundle submit path/to/gromacs_md \
 | MaxReplicaIndex | Last replica index (for parallel replicas) | 0 |
 | ShutdownGracePeriodSeconds | Time a canceled production MD task has to write a checkpoint before it is killed | 60 |
 
-When a production MD task is canceled or times out, the task asks `mdrun` to stop, and `mdrun` writes a checkpoint at its next neighbor search step. The task copies it to `replica_N/md.cpt` in the output directory, so the run can be continued with `gmx mdrun -cpi md.cpt`. If `mdrun` has not finished writing within `ShutdownGracePeriodSeconds`, the task is killed and no new checkpoint is saved, so raise it for large systems.
+When a production MD task is canceled or times out, the task asks `mdrun` to stop, and `mdrun` writes a checkpoint at its next neighbor search step. The task copies it to `replica_N/md.cpt` in the output directory, alongside `md.tpr` and the partial outputs, so the run can be continued from that directory with `gmx mdrun -deffnm md -cpi md.cpt`. If `mdrun` has not finished writing within the grace period, which is at most `ShutdownGracePeriodSeconds`, the task is killed and no new checkpoint is saved, so raise it for large systems.
 
 ### Multi-Replica Example
 

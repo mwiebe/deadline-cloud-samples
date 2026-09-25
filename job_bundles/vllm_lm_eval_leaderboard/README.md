@@ -38,7 +38,7 @@ deadline config set defaults.queue_id <CUDAQueueId from stack outputs>
 This bundle has been verified end-to-end against the queue environment provisioned by `cuda_farm` with no modifications required.
 
 **Already have a farm?** You need:
-- An SMF fleet with NVIDIA GPUs, ≥32 GB RAM, ≥4 vCPU. The `WorkerMemoryGiB` parameter sets the RAM each evaluation task requires.
+- An SMF fleet with NVIDIA GPUs, ≥32 GiB RAM, ≥4 vCPU. The `WorkerMemoryGiB` parameter sets the RAM each evaluation task requires.
 - A queue with a Conda queue environment attached that reads `CondaPackages` and `CondaChannels` job parameters (any of the templates in [`queue_environments/`](../../queue_environments) named `conda_queue_env_*.yaml`)
 
 A HuggingFace token is only needed for gated models (Llama, etc.).
